@@ -1,0 +1,8 @@
+com\flashcards\DeckTest.class
+com\flashcards\CardTest.class
+com\flashcards\CardBankTest.class
+com\flashcards\ReportServiceTest.class
+com\flashcards\DeckRepositoryTest.class
+com\flashcards\PasswordHasherTest.class
+com\flashcards\AuthServiceTest.class
+com\flashcards\InputSanitizerTest.class

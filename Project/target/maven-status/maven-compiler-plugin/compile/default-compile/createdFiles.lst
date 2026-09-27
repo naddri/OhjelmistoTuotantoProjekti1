@@ -1,0 +1,15 @@
+com\flashcards\CardBank.class
+com\flashcards\DeckRepository$1.class
+com\flashcards\InputSanitizer.class
+com\flashcards\Deck.class
+com\flashcards\ReportService.class
+com\flashcards\Role.class
+com\flashcards\AuthService$1.class
+com\flashcards\DeckRepository.class
+com\flashcards\ReportService$DashboardReport.class
+com\flashcards\PasswordHasher.class
+com\flashcards\DeckSortOption.class
+com\flashcards\FlashcardApp.class
+com\flashcards\User.class
+com\flashcards\Card.class
+com\flashcards\AuthService.class

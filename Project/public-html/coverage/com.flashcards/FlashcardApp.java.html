@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FlashcardApp.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">flashcard-app</a> &gt; <a href="index.source.html" class="el_package">com.flashcards</a> &gt; <span class="el_source">FlashcardApp.java</span></div><h1>FlashcardApp.java</h1><pre class="source lang-java linenums">package com.flashcards;
+
+import javafx.application.Application;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
+
+import java.util.List;
+
+<span class="nc" id="L16">public final class FlashcardApp extends Application {</span>
+    private static final String BACKGROUND = &quot;#F5F1E9&quot;;
+    private static final String PANEL = &quot;#EDE7D9&quot;;
+    private static final String TEXT = &quot;#171717&quot;;
+    private static final String MUTED = &quot;#9B978F&quot;;
+
+<span class="nc" id="L22">    private final List&lt;Deck&gt; decks = List.of(</span>
+            new Deck(&quot;Cell Biology&quot;, &quot;Biology&quot;, 6),
+            new Deck(&quot;20th Century History&quot;, &quot;History&quot;, 5),
+            new Deck(&quot;Calculus&quot;, &quot;Mathematics&quot;, 7),
+            new Deck(&quot;Literary Devices&quot;, &quot;English Lit&quot;, 5));
+
+    @Override
+    public void start(Stage stage) {
+<span class="nc" id="L30">        VBox content = new VBox(28, brand(), heading(), deckList());</span>
+<span class="nc" id="L31">        content.setMaxWidth(398);</span>
+<span class="nc" id="L32">        content.setPadding(new Insets(43, 22, 43, 22));</span>
+
+<span class="nc" id="L34">        VBox page = new VBox(content);</span>
+<span class="nc" id="L35">        page.setAlignment(Pos.TOP_CENTER);</span>
+<span class="nc" id="L36">        page.setStyle(&quot;-fx-background-color: &quot; + BACKGROUND + &quot;;&quot;);</span>
+
+<span class="nc" id="L38">        Scene scene = new Scene(page, 900, 650);</span>
+<span class="nc" id="L39">        stage.setTitle(&quot;Studycard&quot;);</span>
+<span class="nc" id="L40">        stage.setMinWidth(520);</span>
+<span class="nc" id="L41">        stage.setMinHeight(500);</span>
+<span class="nc" id="L42">        stage.setScene(scene);</span>
+<span class="nc" id="L43">        stage.show();</span>
+<span class="nc" id="L44">    }</span>
+
+    private HBox brand() {
+<span class="nc" id="L47">        Label icon = new Label(&quot;▣&quot;);</span>
+<span class="nc" id="L48">        icon.setStyle(&quot;-fx-background-color: #171717; -fx-text-fill: white; -fx-padding: 3 5 3 5; -fx-background-radius: 3; -fx-font-size: 10px;&quot;);</span>
+
+<span class="nc" id="L50">        Label name = new Label(&quot;STUDYCARD&quot;);</span>
+<span class="nc" id="L51">        name.setStyle(&quot;-fx-text-fill: &quot; + MUTED + &quot;; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 1px;&quot;);</span>
+
+<span class="nc" id="L53">        HBox brand = new HBox(7, icon, name);</span>
+<span class="nc" id="L54">        brand.setAlignment(Pos.CENTER_LEFT);</span>
+<span class="nc" id="L55">        return brand;</span>
+    }
+
+    private VBox heading() {
+<span class="nc" id="L59">        Label title = new Label(&quot;Ready to study?&quot;);</span>
+<span class="nc" id="L60">        title.setStyle(&quot;-fx-text-fill: &quot; + TEXT + &quot;; -fx-font-size: 34px; -fx-font-family: Georgia; -fx-font-weight: bold;&quot;);</span>
+
+<span class="nc" id="L62">        Label summary = new Label(totalCards() + &quot; cards across &quot; + decks.size() + &quot; decks&quot;);</span>
+<span class="nc" id="L63">        summary.setStyle(&quot;-fx-text-fill: &quot; + MUTED + &quot;; -fx-font-size: 12px;&quot;);</span>
+
+<span class="nc" id="L65">        return new VBox(4, title, summary);</span>
+    }
+
+    private VBox deckList() {
+<span class="nc" id="L69">        VBox list = new VBox();</span>
+<span class="nc" id="L70">        list.setStyle(&quot;-fx-background-color: &quot; + PANEL + &quot;; -fx-background-radius: 13;&quot;);</span>
+
+<span class="nc bnc" id="L72" title="All 2 branches missed.">        for (Deck deck : decks) {</span>
+<span class="nc" id="L73">            list.getChildren().add(deckButton(deck));</span>
+<span class="nc" id="L74">        }</span>
+<span class="nc" id="L75">        return list;</span>
+    }
+
+    private Button deckButton(Deck deck) {
+<span class="nc" id="L79">        Label deckName = new Label(deck.name());</span>
+<span class="nc" id="L80">        deckName.setStyle(&quot;-fx-text-fill: &quot; + TEXT + &quot;; -fx-font-size: 13px; -fx-font-weight: bold;&quot;);</span>
+<span class="nc" id="L81">        Label details = new Label(deck.cardSummary());</span>
+<span class="nc" id="L82">        details.setStyle(&quot;-fx-text-fill: &quot; + MUTED + &quot;; -fx-font-size: 11px;&quot;);</span>
+
+<span class="nc" id="L84">        VBox labels = new VBox(2, deckName, details);</span>
+<span class="nc" id="L85">        HBox row = new HBox(labels, new Label(&quot;›&quot;));</span>
+<span class="nc" id="L86">        row.setAlignment(Pos.CENTER_LEFT);</span>
+<span class="nc" id="L87">        HBox.setHgrow(labels, javafx.scene.layout.Priority.ALWAYS);</span>
+<span class="nc" id="L88">        row.getChildren().get(1).setStyle(&quot;-fx-text-fill: #B8B1A4; -fx-font-size: 24px;&quot;);</span>
+
+<span class="nc" id="L90">        Button button = new Button();</span>
+<span class="nc" id="L91">        button.setGraphic(row);</span>
+<span class="nc" id="L92">        button.setMaxWidth(Double.MAX_VALUE);</span>
+<span class="nc" id="L93">        button.setPadding(new Insets(12, 15, 12, 15));</span>
+<span class="nc" id="L94">        button.setStyle(&quot;-fx-background-color: transparent; -fx-border-color: transparent transparent #E2DCCE transparent; -fx-border-width: 0 0 1 0; -fx-cursor: hand;&quot;);</span>
+<span class="nc" id="L95">        button.setOnAction(event -&gt; showDeckMessage(deck));</span>
+<span class="nc" id="L96">        return button;</span>
+    }
+
+    private void showDeckMessage(Deck deck) {
+<span class="nc" id="L100">        Alert alert = new Alert(Alert.AlertType.INFORMATION);</span>
+<span class="nc" id="L101">        alert.setTitle(&quot;Studycard&quot;);</span>
+<span class="nc" id="L102">        alert.setHeaderText(deck.name());</span>
+<span class="nc" id="L103">        alert.setContentText(&quot;Starting &quot; + deck.cardCount() + &quot; cards in &quot; + deck.subject() + &quot;.&quot;);</span>
+<span class="nc" id="L104">        alert.showAndWait();</span>
+<span class="nc" id="L105">    }</span>
+
+    private int totalCards() {
+<span class="nc" id="L108">        return decks.stream().mapToInt(Deck::cardCount).sum();</span>
+    }
+
+    public static void main(String[] args) {
+<span class="nc" id="L112">        launch(args);</span>
+<span class="nc" id="L113">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
