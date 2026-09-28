@@ -1,9 +1,12 @@
 pipeline {
 agent any
+tools {
+  maven 'Maven'
+}
 stages {
 stage('Checkout') {
 steps {
-git 'https://github.com/naddri/OTP1IndividualTasks'
+git 'https://github.com/naddri/OhjelmistoTuotantoProjekti1'
 }
 }
 stage('Build') {
