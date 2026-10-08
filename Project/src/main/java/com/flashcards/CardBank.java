@@ -1,5 +1,9 @@
 package com.flashcards;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -13,7 +17,15 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class CardBank {
     private final Map<String, List<Card>> cardsByDeckName = new ConcurrentHashMap<>();
 
+    private final Database database;
+
     public CardBank() {
+        this(null);
+    }
+
+    /** With a database, built-in cards are inserted for seed decks that have none, then served from the cards table. */
+    public CardBank(Database database) {
+        this.database = database;
         cardsByDeckName.put("cell biology", new ArrayList<>(List.of(
                 new Card("What is the powerhouse of the cell?", "The mitochondrion"),
                 new Card("What molecule carries genetic information?", "DNA"),
@@ -57,27 +69,100 @@ public final class CardBank {
                 new Card("What device is a deliberate exaggeration for effect?", "Hyperbole"),
                 new Card("What device uses words that imitate sounds?", "Onomatopoeia"),
                 new Card("What device places contrasting ideas side by side?", "Juxtaposition"))));
+
+        if (database != null) {
+            persistSeedCards();
+            cardsByDeckName.clear();
+        }
+    }
+
+    private void persistSeedCards() {
+        try (Connection conn = database.connect()) {
+            for (var entry : cardsByDeckName.entrySet()) {
+                long deckId = DeckRepository.findDeckId(conn, entry.getKey());
+                if (deckId >= 0 && loadCards(conn, deckId).isEmpty()) {
+                    for (Card card : entry.getValue()) {
+                        insertCard(conn, deckId, card);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Unable to seed cards", e);
+        }
+    }
+
+    private static List<Card> loadCards(Connection conn, long deckId) throws SQLException {
+        List<Card> cards = new ArrayList<>();
+        try (PreparedStatement stmt = conn.prepareStatement(
+                "SELECT question, answer FROM cards WHERE deck_id = ? ORDER BY position, id")) {
+            stmt.setLong(1, deckId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    cards.add(new Card(rs.getString(1), rs.getString(2)));
+                }
+            }
+        }
+        return cards;
+    }
+
+    private static void insertCard(Connection conn, long deckId, Card card) throws SQLException {
+        try (PreparedStatement stmt = conn.prepareStatement(
+                "INSERT INTO cards (deck_id, question, answer, position) "
+                        + "SELECT ?, ?, ?, COALESCE(MAX(position) + 1, 0) FROM cards WHERE deck_id = ?")) {
+            stmt.setLong(1, deckId);
+            stmt.setString(2, card.front());
+            stmt.setString(3, card.back());
+            stmt.setLong(4, deckId);
+            stmt.executeUpdate();
+        }
     }
 
     /** Returns the deck's cards, generating placeholder content on first request if none exists yet. */
     public List<Card> cardsFor(Deck deck) {
         String key = deck.name().toLowerCase();
-        return cardsByDeckName.computeIfAbsent(key, name -> new ArrayList<>(generatePlaceholders(deck)));
+        return cardsByDeckName.computeIfAbsent(key, name -> {
+            if (database != null) {
+                List<Card> stored = loadStored(deck);
+                if (!stored.isEmpty()) {
+                    return stored;
+                }
+            }
+            return new ArrayList<>(placeholders(deck.subject(), deck.cardCount()));
+        });
+    }
+
+    private List<Card> loadStored(Deck deck) {
+        try (Connection conn = database.connect()) {
+            long deckId = DeckRepository.findDeckId(conn, deck.name());
+            return deckId < 0 ? new ArrayList<>() : loadCards(conn, deckId);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Unable to load cards", e);
+        }
     }
 
     /** Appends a real card to the deck, creating its card list if none exists yet. */
     public Card addCard(Deck deck, String front, String back) {
         Card card = new Card(front, back);
-        cardsByDeckName.computeIfAbsent(deck.name().toLowerCase(), name -> new ArrayList<>()).add(card);
+        List<Card> cards = cardsFor(deck);
+        if (database != null) {
+            try (Connection conn = database.connect()) {
+                long deckId = DeckRepository.findDeckId(conn, deck.name());
+                if (deckId < 0) {
+                    throw new IllegalArgumentException("Deck not found: " + deck.name());
+                }
+                insertCard(conn, deckId, card);
+            } catch (SQLException e) {
+                throw new IllegalStateException("Unable to save card", e);
+            }
+        }
+        cards.add(card);
         return card;
     }
 
-    private List<Card> generatePlaceholders(Deck deck) {
+    static List<Card> placeholders(String subject, int count) {
         List<Card> placeholders = new ArrayList<>();
-        for (int i = 1; i <= deck.cardCount(); i++) {
-            placeholders.add(new Card(
-                    deck.subject() + " term " + i,
-                    deck.subject() + " definition " + i));
+        for (int i = 1; i <= count; i++) {
+            placeholders.add(new Card(subject + " term " + i, subject + " definition " + i));
         }
         return placeholders;
     }

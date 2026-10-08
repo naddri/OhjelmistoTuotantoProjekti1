@@ -41,14 +41,36 @@ public final class FlashcardApp extends Application {
         SORT_OPTIONS.put("Most cards first", DeckSortOption.CARD_COUNT_DESC);
     }
 
-    private final AuthService authService = new AuthService();
-    private final DeckRepository deckRepository = new DeckRepository(List.of(
-            new Deck("Cell Biology", "Biology", 10),
-            new Deck("20th Century History", "History", 8),
-            new Deck("Calculus", "Mathematics", 10),
-            new Deck("Literary Devices", "English Lit", 8)));
+    private final Database database = connectDatabase();
+    private final AuthService authService = new AuthService(database);
+    private final DeckRepository deckRepository = createDeckRepository();
     private final ReportService reportService = new ReportService(deckRepository, authService);
-    private final CardBank cardBank = new CardBank();
+    private final CardBank cardBank = new CardBank(database);
+
+    private static Database connectDatabase() {
+        Database db = Database.fromEnvironment();
+        if (db.isAvailable()) {
+            return db;
+        }
+        System.err.println("Falling back to in-memory storage.");
+        return null;
+    }
+
+    private DeckRepository createDeckRepository() {
+        List<Deck> seeds = List.of(
+                new Deck("Cell Biology", "Biology", 10),
+                new Deck("20th Century History", "History", 8),
+                new Deck("Calculus", "Mathematics", 10),
+                new Deck("Literary Devices", "English Lit", 8));
+        if (database == null) {
+            return new DeckRepository(seeds);
+        }
+        seedDemoAccounts();
+        DeckRepository repository = new DeckRepository(database, seeds);
+        new CardBank(database);
+        repository.reload();
+        return repository;
+    }
 
     private Stage stage;
     private Scene scene;
@@ -57,7 +79,9 @@ public final class FlashcardApp extends Application {
     @Override
     public void start(Stage primaryStage) {
         this.stage = primaryStage;
-        seedDemoAccounts();
+        if (database == null) {
+            seedDemoAccounts();
+        }
 
         stage.setTitle("Studycard");
         stage.setMinWidth(580);
@@ -81,9 +105,15 @@ public final class FlashcardApp extends Application {
 
     /** Demo accounts so reviewers can sign in immediately without registering first. */
     private void seedDemoAccounts() {
-        authService.register("admin", "admin1234".toCharArray(), Role.ADMIN);
-        authService.register("teacher", "teacher123".toCharArray(), Role.TEACHER);
-        authService.register("student", "student123".toCharArray(), Role.STUDENT);
+        seedAccount("admin", "admin1234", Role.ADMIN);
+        seedAccount("teacher", "teacher123", Role.TEACHER);
+        seedAccount("student", "student123", Role.STUDENT);
+    }
+
+    private void seedAccount(String username, String password, Role role) {
+        if (authService.findByUsername(username).isEmpty()) {
+            authService.register(username, password.toCharArray(), role);
+        }
     }
 
     // ---------------------------------------------------------------- login
