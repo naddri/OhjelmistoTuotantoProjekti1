@@ -62,8 +62,26 @@ A JavaFX desktop application for studying with flashcards. Students browse decks
 - No external runtime dependencies other than JavaFX. Password hashing uses the JDK's built-in PBKDF2 (`javax.crypto`), so no third-party security library is needed.
 - The JavaFX native classifier defaults to Windows (`javafx.platform=win` in `Project/pom.xml`). Override it with `-Djavafx.platform=linux` for Linux builds.
 - **Database:** no database is used by the current prototype; all data is stored in memory. The original plan was MariaDB for persistence (see the planned ER design in [Section 3](#er-design-planned-persistence)).
-- **Localisation:** no localised resource bundles are used; the UI is English only.
-- The Docker image renders the JavaFX window over X11, so running it on Windows needs an X server (for example Xming or VcXsrv).
+- **Localization:** the UI uses Java's built-in `ResourceBundle` with UTF-8 `.properties` files. English, Japanese, Russian, and Arabic are included; locale-aware number and date formatting uses the JDK's `NumberFormat` and `DateTimeFormatter`.
+- The Docker image renders the JavaFX window over X11, so running it on Windows needs an X server (for example Xming or VcXsrv). It installs Noto CJK fonts so Japanese UI text renders in the container.
+
+### Localization framework and translation resources
+
+Select a language from the **Language** menu on the login, deck, study, or dashboard screen. The current screen, deck progress, and deck search/filter/sort selection are retained when the language changes. The UI supports English (default), Japanese (`ja`), Russian (`ru`), and Arabic (`ar`). Arabic switches JavaFX node orientation to right-to-left; the other languages use left-to-right layout.
+
+Localization is implemented without third-party dependencies:
+
+- `Project/src/main/resources/com/flashcards/messages.properties` is the English source bundle.
+- `messages_ja.properties`, `messages_ru.properties`, and `messages_ar.properties` contain the translated strings. Add another language by adding a matching `messages_<language-tag>.properties` file and registering it in `FlashcardApp`.
+- Dynamic counts and dashboard values use locale-sensitive number formatting. The dashboard's generated-at timestamp uses the selected locale's date/time format. The dashboard subject breakdown is rendered as localized rows rather than a JavaFX `TableView`.
+- All interface copy, including field prompts, buttons, headings, sorting/filter options, progress text, empty states, and validation errors, is represented by bundle keys. Full translation key inventory:
+
+  - App/login/common: `app.title`, `language.label`, `login.title`, `login.subtitle`, `login.registerTitle`, `login.registerSubtitle`, `login.username`, `login.password`, `login.signIn`, `login.createAccount`, `login.newAccount`, `login.existingAccount`, `common.back`, `common.logout`
+  - Decks/sorting: `decks.welcome`, `decks.dashboard`, `decks.search`, `decks.allSubjects`, `decks.title`, `decks.summary`, `decks.cardSummary`, `decks.card.one`, `decks.card.many`, `decks.empty`, `sort.name`, `sort.subject`, `sort.cards`
+  - Forms/study: `deckForm.title`, `deckForm.name`, `deckForm.subject`, `deckForm.cardCount`, `deckForm.add`, `cardForm.title`, `cardForm.add`, `study.backToDecks`, `study.hint`, `study.previous`, `study.flip`, `study.next`, `study.answer`, `study.question`, `study.progress`
+  - Dashboard/roles/errors: `dashboard.title`, `dashboard.totalDecks`, `dashboard.totalCards`, `dashboard.averageCards`, `dashboard.registeredUsers`, `dashboard.subjectBreakdown`, `dashboard.generatedAt`, `role.student`, `role.teacher`, `role.admin`, `error.invalidCredentials`, `error.usernameTaken`, `error.usernameRule`, `error.passwordRule`, `error.deckName`, `error.deckSubject`, `error.deckCardCount`, `error.cardQuestion`, `error.cardAnswer`, `error.wholeNumber`, `error.deckNotFound`, `error.userSave`, `error.deckSave`, `error.cardSave`, `error.passwordHash`, `error.unknown`
+
+Essential localization resources are the property files and native/professional translators who can review terminology and right-to-left rendering. Contributors can edit the UTF-8 files directly; no localization CMS or third-party library is required. Keep every key present in every language bundle and run `mvn test` from `Project` after changing translations.
 
 ---
 
@@ -331,7 +349,7 @@ Test reports are written to `target/surefire-reports/` and the coverage report t
 mvn javafx:run
 ```
 
-No configuration or database setup is required. Sign in with one of the seeded demo accounts, or register a new student account:
+No configuration or database setup is required. Choose a language from the **Language** menu to run the interface in that language, then sign in with one of the seeded demo accounts, or register a new student account:
 
 | Username | Password | Role |
 |----------|----------|------|
@@ -341,7 +359,7 @@ No configuration or database setup is required. Sign in with one of the seeded d
 
 ### 5. Run with Docker (optional)
 
-The image contains the Linux JavaFX SDK and displays the window through an X server.
+The image contains the Linux JavaFX SDK and Noto CJK fonts, and displays the window through an X server.
 
 1. Start an X server on the host (for example Xming or VcXsrv, with access control disabled).
 2. Build the jar and the image:

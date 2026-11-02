@@ -4,7 +4,9 @@ WORKDIR /app
 
 # 1. Install GUI libraries (needed to render the JavaFX window over X11)
 RUN apt-get update && apt-get install -y \
-    libx11-6 libxext6 libxrender1 libxtst6 libxi6 libgtk-3-0 mesa-utils wget unzip \
+    libx11-6 libxext6 libxrender1 libxtst6 libxi6 libgtk-3-0 mesa-utils \
+    fontconfig fonts-noto-cjk wget unzip \
+    && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Download JavaFX SDK (linux build, matches javafx.version in pom.xml)

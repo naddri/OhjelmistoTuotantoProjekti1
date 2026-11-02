@@ -2,6 +2,7 @@ package com.flashcards;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
+import javafx.geometry.NodeOrientation;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -19,6 +20,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,12 +35,14 @@ public final class FlashcardApp extends Application {
     private static final String TEXT = "#171717";
     private static final String MUTED = "#9B978F";
     private static final String ERROR = "#B3261E";
+    private static final String JAPANESE_FONT_FAMILY = "Noto Sans CJK JP";
 
-    private static final Map<String, DeckSortOption> SORT_OPTIONS = new LinkedHashMap<>();
+    private static final Map<String, String> LANGUAGES = new LinkedHashMap<>();
     static {
-        SORT_OPTIONS.put("Name (A-Z)", DeckSortOption.NAME_ASC);
-        SORT_OPTIONS.put("Subject (A-Z)", DeckSortOption.SUBJECT_ASC);
-        SORT_OPTIONS.put("Most cards first", DeckSortOption.CARD_COUNT_DESC);
+        LANGUAGES.put("English", "en");
+        LANGUAGES.put("日本語", "ja");
+        LANGUAGES.put("Русский", "ru");
+        LANGUAGES.put("العربية", "ar");
     }
 
     private final Database database = connectDatabase();
@@ -75,6 +79,11 @@ public final class FlashcardApp extends Application {
     private Stage stage;
     private Scene scene;
     private User currentUser;
+    private final Localization localization = new Localization();
+    private Deck currentDeck;
+    private int studyIndex;
+    private boolean showingAnswer;
+    private boolean registerMode;
 
     @Override
     public void start(Stage primaryStage) {
@@ -83,13 +92,52 @@ public final class FlashcardApp extends Application {
             seedDemoAccounts();
         }
 
-        stage.setTitle("Studycard");
+        stage.setTitle(text("app.title"));
         stage.setMinWidth(580);
         stage.setMinHeight(560);
         scene = new Scene(new VBox(), 1040, 760);
         stage.setScene(scene);
         showLoginScene();
         stage.show();
+    }
+
+    private String text(String key, Object... arguments) {
+        return localization.text(key, arguments);
+    }
+
+    private String titleFontFamily() {
+        return "ja".equals(localization.locale().getLanguage())
+                ? JAPANESE_FONT_FAMILY : "Georgia";
+    }
+
+    private void setPageRoot(VBox pageRoot) {
+        pageRoot.setNodeOrientation(localization.isRightToLeft()
+                ? NodeOrientation.RIGHT_TO_LEFT : NodeOrientation.LEFT_TO_RIGHT);
+        if ("ja".equals(localization.locale().getLanguage())) {
+            pageRoot.setStyle(pageRoot.getStyle() + "-fx-font-family: \"" + JAPANESE_FONT_FAMILY + "\";");
+        }
+        scene.setRoot(pageRoot);
+    }
+
+    private ComboBox<String> languageSelector(Runnable rerender) {
+        ComboBox<String> selector = new ComboBox<>();
+        selector.setStyle("-fx-font-family: \"" + JAPANESE_FONT_FAMILY + "\";");
+        selector.getItems().addAll(LANGUAGES.keySet());
+        selector.setValue(LANGUAGES.entrySet().stream()
+                .filter(entry -> entry.getValue().equals(localization.locale().getLanguage()))
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElseThrow());
+        selector.setAccessibleText(text("language.label"));
+        selector.setOnAction(event -> {
+            String languageTag = LANGUAGES.get(selector.getValue());
+            if (languageTag != null && !languageTag.equals(localization.locale().getLanguage())) {
+                localization.setLanguage(languageTag);
+                stage.setTitle(text("app.title"));
+                rerender.run();
+            }
+        });
+        return selector;
     }
 
     /** Wraps content in a scroll pane that keeps it centered and lets it shrink or grow with the window. */
@@ -119,20 +167,25 @@ public final class FlashcardApp extends Application {
     // ---------------------------------------------------------------- login
 
     private void showLoginScene() {
-        boolean[] registerMode = {false};
+        registerMode = false;
+        showLoginScene("", "");
+    }
 
-        Label title = new Label("Welcome back");
-        title.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 32px; -fx-font-family: Georgia; -fx-font-weight: bold;");
+    private void showLoginScene(String username, String password) {
+        Label title = new Label(text(registerMode ? "login.registerTitle" : "login.title"));
+        title.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 32px; -fx-font-family: \"" + titleFontFamily() + "\"; -fx-font-weight: bold;");
 
-        Label subtitle = new Label("Sign in to continue studying");
+        Label subtitle = new Label(text(registerMode ? "login.registerSubtitle" : "login.subtitle"));
         subtitle.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 13px;");
 
         TextField usernameField = new TextField();
-        usernameField.setPromptText("Username");
+        usernameField.setText(username);
+        usernameField.setPromptText(text("login.username"));
         styleField(usernameField);
 
         PasswordField passwordField = new PasswordField();
-        passwordField.setPromptText("Password");
+        passwordField.setText(password);
+        passwordField.setPromptText(text("login.password"));
         styleField(passwordField);
 
         Label errorLabel = new Label();
@@ -140,36 +193,40 @@ public final class FlashcardApp extends Application {
         errorLabel.setManaged(false);
         errorLabel.setVisible(false);
 
-        Button primaryButton = new Button("Sign in");
+        Button primaryButton = new Button(text(registerMode ? "login.createAccount" : "login.signIn"));
         primaryButton.setMaxWidth(Double.MAX_VALUE);
         primaryButton.setStyle("-fx-background-color: " + TEXT + "; -fx-text-fill: white; -fx-font-size: 13px; -fx-font-weight: bold; -fx-background-radius: 8; -fx-padding: 12;");
 
-        Hyperlink toggleLink = new Hyperlink("New here? Create an account");
+        Hyperlink toggleLink = new Hyperlink(text(registerMode ? "login.existingAccount" : "login.newAccount"));
         toggleLink.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 12px;");
 
+        HBox languageRow = new HBox(8, new Label(text("language.label")),
+                languageSelector(() -> showLoginScene(usernameField.getText(), passwordField.getText())));
+        languageRow.setAlignment(Pos.CENTER_RIGHT);
+
         toggleLink.setOnAction(e -> {
-            registerMode[0] = !registerMode[0];
-            title.setText(registerMode[0] ? "Create an account" : "Welcome back");
-            subtitle.setText(registerMode[0] ? "Choose a username and password" : "Sign in to continue studying");
-            primaryButton.setText(registerMode[0] ? "Create account" : "Sign in");
-            toggleLink.setText(registerMode[0] ? "Already have an account? Sign in" : "New here? Create an account");
+            registerMode = !registerMode;
+            title.setText(text(registerMode ? "login.registerTitle" : "login.title"));
+            subtitle.setText(text(registerMode ? "login.registerSubtitle" : "login.subtitle"));
+            primaryButton.setText(text(registerMode ? "login.createAccount" : "login.signIn"));
+            toggleLink.setText(text(registerMode ? "login.existingAccount" : "login.newAccount"));
             hide(errorLabel);
         });
 
         primaryButton.setOnAction(e -> {
             hide(errorLabel);
             try {
-                if (registerMode[0]) {
+                if (registerMode) {
                     authService.register(usernameField.getText(), passwordField.getText().toCharArray(), Role.STUDENT);
                 }
                 currentUser = authService.login(usernameField.getText(), passwordField.getText().toCharArray());
                 showMainScene();
             } catch (IllegalArgumentException | IllegalStateException | SecurityException ex) {
-                show(errorLabel, ex.getMessage());
+                show(errorLabel, localizedError(ex.getMessage()));
             }
         });
 
-        VBox form = new VBox(14, title, subtitle, usernameField, passwordField, errorLabel, primaryButton, toggleLink);
+        VBox form = new VBox(14, title, subtitle, languageRow, usernameField, passwordField, errorLabel, primaryButton, toggleLink);
         form.setMaxWidth(360);
         form.setPadding(new Insets(36, 32, 36, 32));
         form.setStyle("-fx-background-color: " + PANEL + "; -fx-background-radius: 16;");
@@ -185,7 +242,32 @@ public final class FlashcardApp extends Application {
         page.setAlignment(Pos.CENTER);
         page.setStyle("-fx-background-color: " + BACKGROUND + ";");
 
-        scene.setRoot(page);
+        setPageRoot(page);
+    }
+
+    private String localizedError(String message) {
+        if (message == null) {
+            return text("error.unknown");
+        }
+        if (message.startsWith("Deck not found: ")) {
+            return text("error.deckNotFound", message.substring("Deck not found: ".length()));
+        }
+        return switch (message) {
+            case "Invalid username or password" -> text("error.invalidCredentials");
+            case "Username is already taken" -> text("error.usernameTaken");
+            case "Username must be 3-32 characters (letters, digits, '.', '_' or '-')" -> text("error.usernameRule");
+            case "Password must be at least 8 characters" -> text("error.passwordRule");
+            case "Deck name cannot be blank" -> text("error.deckName");
+            case "Deck subject cannot be blank" -> text("error.deckSubject");
+            case "A deck needs at least one card" -> text("error.deckCardCount");
+            case "Card front cannot be blank" -> text("error.cardQuestion");
+            case "Card back cannot be blank" -> text("error.cardAnswer");
+            case "Unable to save user" -> text("error.userSave");
+            case "Unable to save deck" -> text("error.deckSave");
+            case "Unable to save card" -> text("error.cardSave");
+            case "Unable to hash password" -> text("error.passwordHash");
+            default -> message;
+        };
     }
 
     private void styleField(TextField field) {
@@ -206,25 +288,39 @@ public final class FlashcardApp extends Application {
     // ----------------------------------------------------------------- main
 
     private void showMainScene() {
-        String[] searchText = {""};
-        String[] subjectFilter = {"All"};
-        DeckSortOption[] sortOption = {DeckSortOption.NAME_ASC};
+        showMainScene("", "All", DeckSortOption.NAME_ASC);
+    }
+
+    private void showMainScene(String initialSearch, String initialSubjectFilter, DeckSortOption initialSortOption) {
+        String[] searchText = {initialSearch};
+        String[] subjectFilter = {initialSubjectFilter};
+        DeckSortOption[] sortOption = {initialSortOption};
 
         VBox deckListHolder = new VBox();
 
         TextField searchField = new TextField();
-        searchField.setPromptText("Search decks or subjects");
+        searchField.setText(initialSearch);
+        searchField.setPromptText(text("decks.search"));
         styleField(searchField);
         HBox.setHgrow(searchField, Priority.ALWAYS);
 
         ComboBox<String> subjectCombo = new ComboBox<>();
-        subjectCombo.getItems().add("All");
+        subjectCombo.getItems().add(text("decks.allSubjects"));
         subjectCombo.getItems().addAll(deckRepository.subjects());
-        subjectCombo.setValue("All");
+        subjectCombo.setValue("All".equals(initialSubjectFilter)
+                ? text("decks.allSubjects") : initialSubjectFilter);
 
         ComboBox<String> sortCombo = new ComboBox<>();
-        sortCombo.getItems().addAll(SORT_OPTIONS.keySet());
-        sortCombo.setValue("Name (A-Z)");
+        Map<String, DeckSortOption> sortOptions = new LinkedHashMap<>();
+        sortOptions.put(text("sort.name"), DeckSortOption.NAME_ASC);
+        sortOptions.put(text("sort.subject"), DeckSortOption.SUBJECT_ASC);
+        sortOptions.put(text("sort.cards"), DeckSortOption.CARD_COUNT_DESC);
+        sortCombo.getItems().addAll(sortOptions.keySet());
+        sortCombo.setValue(sortOptions.entrySet().stream()
+                .filter(entry -> entry.getValue() == initialSortOption)
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse(text("sort.name")));
 
         Runnable refreshList = () -> renderDeckList(deckListHolder, searchText[0], subjectFilter[0], sortOption[0]);
 
@@ -233,11 +329,11 @@ public final class FlashcardApp extends Application {
             refreshList.run();
         });
         subjectCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
-            subjectFilter[0] = newVal;
+            subjectFilter[0] = text("decks.allSubjects").equals(newVal) ? "All" : newVal;
             refreshList.run();
         });
         sortCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
-            sortOption[0] = SORT_OPTIONS.getOrDefault(newVal, DeckSortOption.NAME_ASC);
+            sortOption[0] = sortOptions.getOrDefault(newVal, DeckSortOption.NAME_ASC);
             refreshList.run();
         });
 
@@ -246,7 +342,8 @@ public final class FlashcardApp extends Application {
 
         refreshList.run();
 
-        VBox content = new VBox(20, topBar(), heading(), searchBar, deckListHolder);
+        VBox content = new VBox(20, topBar(() -> showMainScene(
+                searchText[0], subjectFilter[0], sortOption[0])), heading(), searchBar, deckListHolder);
         if (currentUser.canManageContent()) {
             content.getChildren().add(addDeckForm(refreshList));
         }
@@ -259,32 +356,33 @@ public final class FlashcardApp extends Application {
         page.setAlignment(Pos.TOP_CENTER);
         page.setStyle("-fx-background-color: " + BACKGROUND + ";");
 
-        scene.setRoot(page);
+        setPageRoot(page);
     }
 
-    private HBox topBar() {
+    private HBox topBar(Runnable rerender) {
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Label welcome = new Label("Hi, " + currentUser.username() + " (" + currentUser.role() + ")");
+        Label welcome = new Label(text("decks.welcome", currentUser.username(), text("role." + currentUser.role().name().toLowerCase())));
         welcome.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 12px;");
 
         HBox bar = new HBox(12, spacer, welcome);
         bar.setAlignment(Pos.CENTER_LEFT);
 
         if (currentUser.isAdmin()) {
-            Button dashboardButton = new Button("Dashboard");
+            Button dashboardButton = new Button(text("decks.dashboard"));
             dashboardButton.setStyle(secondaryButtonStyle());
             dashboardButton.setOnAction(e -> showDashboardScene());
             bar.getChildren().add(bar.getChildren().size() - 1, dashboardButton);
         }
 
-        Button logoutButton = new Button("Log out");
+        Button logoutButton = new Button(text("common.logout"));
         logoutButton.setStyle(secondaryButtonStyle());
         logoutButton.setOnAction(e -> {
             currentUser = null;
             showLoginScene();
         });
+        bar.getChildren().add(languageSelector(rerender));
         bar.getChildren().add(logoutButton);
         return bar;
     }
@@ -297,10 +395,10 @@ public final class FlashcardApp extends Application {
         List<Deck> allDecks = deckRepository.all();
         int totalCards = allDecks.stream().mapToInt(Deck::cardCount).sum();
 
-        Label title = new Label("Ready to study?");
-        title.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 38px; -fx-font-family: Georgia; -fx-font-weight: bold;");
+        Label title = new Label(text("decks.title"));
+        title.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 38px; -fx-font-family: \"" + titleFontFamily() + "\"; -fx-font-weight: bold;");
 
-        Label summary = new Label(totalCards + " cards across " + allDecks.size() + " decks");
+        Label summary = new Label(text("decks.summary", localization.number(totalCards), localization.number(allDecks.size())));
         summary.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 13px;");
 
         return new VBox(4, title, summary);
@@ -313,7 +411,7 @@ public final class FlashcardApp extends Application {
         list.setStyle("-fx-background-color: " + PANEL + "; -fx-background-radius: 13;");
 
         if (matches.isEmpty()) {
-            Label empty = new Label("No decks match your search.");
+            Label empty = new Label(text("decks.empty"));
             empty.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 13px; -fx-padding: 16;");
             list.getChildren().add(empty);
         } else {
@@ -328,11 +426,13 @@ public final class FlashcardApp extends Application {
     private Button deckButton(Deck deck) {
         Label deckName = new Label(deck.name());
         deckName.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 14px; -fx-font-weight: bold;");
-        Label details = new Label(deck.cardSummary());
+        Label details = new Label(text("decks.cardSummary", deck.subject(),
+                localization.number(deck.cardCount()),
+                text(deck.cardCount() == 1 ? "decks.card.one" : "decks.card.many")));
         details.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 12px;");
 
         VBox labels = new VBox(2, deckName, details);
-        HBox row = new HBox(labels, new Label("\u203A"));
+        HBox row = new HBox(labels, new Label(localization.isRightToLeft() ? "\u2039" : "\u203A"));
         row.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(labels, Priority.ALWAYS);
         row.getChildren().get(1).setStyle("-fx-text-fill: #B8B1A4; -fx-font-size: 26px;");
@@ -342,24 +442,31 @@ public final class FlashcardApp extends Application {
         button.setMaxWidth(Double.MAX_VALUE);
         button.setPadding(new Insets(12, 15, 12, 15));
         button.setStyle("-fx-background-color: transparent; -fx-border-color: transparent transparent #E2DCCE transparent; -fx-border-width: 0 0 1 0; -fx-cursor: hand;");
-        button.setOnAction(event -> showStudyScene(deck));
+        button.setOnAction(event -> {
+            if (!deck.equals(currentDeck)) {
+                studyIndex = 0;
+                showingAnswer = false;
+            }
+            currentDeck = deck;
+            showStudyScene(deck);
+        });
         return button;
     }
 
     private VBox addDeckForm(Runnable onDeckAdded) {
-        Label heading = new Label("Add a new deck");
+        Label heading = new Label(text("deckForm.title"));
         heading.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 14px; -fx-font-weight: bold;");
 
         TextField nameField = new TextField();
-        nameField.setPromptText("Deck name");
+        nameField.setPromptText(text("deckForm.name"));
         styleField(nameField);
 
         TextField subjectField = new TextField();
-        subjectField.setPromptText("Subject");
+        subjectField.setPromptText(text("deckForm.subject"));
         styleField(subjectField);
 
         TextField cardCountField = new TextField();
-        cardCountField.setPromptText("Card count");
+        cardCountField.setPromptText(text("deckForm.cardCount"));
         styleField(cardCountField);
 
         Label errorLabel = new Label();
@@ -367,7 +474,7 @@ public final class FlashcardApp extends Application {
         errorLabel.setManaged(false);
         errorLabel.setVisible(false);
 
-        Button addButton = new Button("Add deck");
+        Button addButton = new Button(text("deckForm.add"));
         addButton.setStyle("-fx-background-color: " + TEXT + "; -fx-text-fill: white; -fx-font-size: 13px; -fx-font-weight: bold; -fx-background-radius: 8; -fx-padding: 9 18 9 18;");
         addButton.setOnAction(e -> {
             hide(errorLabel);
@@ -379,9 +486,9 @@ public final class FlashcardApp extends Application {
                 cardCountField.clear();
                 onDeckAdded.run();
             } catch (NumberFormatException ex) {
-                show(errorLabel, "Card count must be a whole number");
+                show(errorLabel, text("error.wholeNumber"));
             } catch (IllegalArgumentException ex) {
-                show(errorLabel, ex.getMessage());
+                show(errorLabel, localizedError(ex.getMessage()));
             }
         });
 
@@ -398,13 +505,13 @@ public final class FlashcardApp extends Application {
 
     private void showStudyScene(Deck deck) {
         List<Card> cards = cardBank.cardsFor(deck);
-        int[] index = {0};
-        boolean[] showingBack = {false};
 
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button backButton = new Button("\u2039 Back to decks");
+        currentDeck = deck;
+
+        Button backButton = new Button(text("study.backToDecks"));
         backButton.setStyle(secondaryButtonStyle());
         backButton.setOnAction(e -> showMainScene());
 
@@ -412,7 +519,7 @@ public final class FlashcardApp extends Application {
         bar.setAlignment(Pos.CENTER_LEFT);
 
         Label title = new Label(deck.name());
-        title.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 28px; -fx-font-family: Georgia; -fx-font-weight: bold;");
+        title.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 28px; -fx-font-family: \"" + titleFontFamily() + "\"; -fx-font-weight: bold;");
 
         Label progress = new Label();
         progress.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 13px;");
@@ -424,7 +531,7 @@ public final class FlashcardApp extends Application {
         cardText.setWrapText(true);
         cardText.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 20px; -fx-font-weight: bold; -fx-text-alignment: center;");
 
-        Label hint = new Label("Click the card to flip it");
+        Label hint = new Label(text("study.hint"));
         hint.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 11px;");
 
         VBox cardPanel = new VBox(12, sideLabel, cardText);
@@ -434,41 +541,41 @@ public final class FlashcardApp extends Application {
         cardPanel.setMaxWidth(Double.MAX_VALUE);
         cardPanel.setStyle("-fx-background-color: " + PANEL + "; -fx-background-radius: 16; -fx-cursor: hand;");
 
-        Button prevButton = new Button("\u2039 Previous");
+        Button prevButton = new Button(text("study.previous"));
         prevButton.setStyle(secondaryButtonStyle());
-        Button flipButton = new Button("Flip card");
+        Button flipButton = new Button(text("study.flip"));
         flipButton.setStyle("-fx-background-color: " + TEXT + "; -fx-text-fill: white; -fx-font-size: 13px; -fx-font-weight: bold; -fx-background-radius: 8; -fx-padding: 9 18 9 18;");
-        Button nextButton = new Button("Next \u203A");
+        Button nextButton = new Button(text("study.next"));
         nextButton.setStyle(secondaryButtonStyle());
 
         Runnable render = () -> {
-            Card card = cards.get(index[0]);
-            sideLabel.setText(showingBack[0] ? "ANSWER" : "QUESTION");
-            cardText.setText(showingBack[0] ? card.back() : card.front());
-            progress.setText("Card " + (index[0] + 1) + " of " + cards.size());
-            prevButton.setDisable(index[0] == 0);
-            nextButton.setDisable(index[0] == cards.size() - 1);
+            Card card = cards.get(studyIndex);
+            sideLabel.setText(text(showingAnswer ? "study.answer" : "study.question"));
+            cardText.setText(showingAnswer ? card.back() : card.front());
+            progress.setText(text("study.progress", localization.number(studyIndex + 1), localization.number(cards.size())));
+            prevButton.setDisable(studyIndex == 0);
+            nextButton.setDisable(studyIndex == cards.size() - 1);
         };
 
         cardPanel.setOnMouseClicked(e -> {
-            showingBack[0] = !showingBack[0];
+            showingAnswer = !showingAnswer;
             render.run();
         });
         flipButton.setOnAction(e -> {
-            showingBack[0] = !showingBack[0];
+            showingAnswer = !showingAnswer;
             render.run();
         });
         prevButton.setOnAction(e -> {
-            if (index[0] > 0) {
-                index[0]--;
-                showingBack[0] = false;
+            if (studyIndex > 0) {
+                studyIndex--;
+                showingAnswer = false;
                 render.run();
             }
         });
         nextButton.setOnAction(e -> {
-            if (index[0] < cards.size() - 1) {
-                index[0]++;
-                showingBack[0] = false;
+            if (studyIndex < cards.size() - 1) {
+                studyIndex++;
+                showingAnswer = false;
                 render.run();
             }
         });
@@ -478,9 +585,10 @@ public final class FlashcardApp extends Application {
         HBox navigation = new HBox(8, prevButton, flipButton, nextButton);
         navigation.setAlignment(Pos.CENTER);
 
+        bar.getChildren().add(languageSelector(() -> showStudyScene(deck)));
         VBox content = new VBox(16, bar, title, progress, cardPanel, hint, navigation);
         if (currentUser.canManageContent()) {
-            content.getChildren().add(addCardForm(deck, cards, render, index, showingBack));
+            content.getChildren().add(addCardForm(deck, cards, render));
         }
         content.setMaxWidth(460);
         content.setPadding(new Insets(32, 22, 43, 22));
@@ -491,20 +599,20 @@ public final class FlashcardApp extends Application {
         page.setAlignment(Pos.TOP_CENTER);
         page.setStyle("-fx-background-color: " + BACKGROUND + ";");
 
-        scene.setRoot(page);
+        setPageRoot(page);
     }
 
-    private VBox addCardForm(Deck deck, List<Card> cards, Runnable render, int[] index, boolean[] showingBack) {
-        Label heading = new Label("Add a card");
+    private VBox addCardForm(Deck deck, List<Card> cards, Runnable render) {
+        Label heading = new Label(text("cardForm.title"));
         heading.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 14px; -fx-font-weight: bold;");
 
         TextField frontField = new TextField();
-        frontField.setPromptText("Question");
+        frontField.setPromptText(text("study.question"));
         styleField(frontField);
         HBox.setHgrow(frontField, Priority.ALWAYS);
 
         TextField backField = new TextField();
-        backField.setPromptText("Answer");
+        backField.setPromptText(text("study.answer"));
         styleField(backField);
         HBox.setHgrow(backField, Priority.ALWAYS);
 
@@ -513,7 +621,7 @@ public final class FlashcardApp extends Application {
         errorLabel.setManaged(false);
         errorLabel.setVisible(false);
 
-        Button addButton = new Button("Add card");
+        Button addButton = new Button(text("cardForm.add"));
         addButton.setStyle("-fx-background-color: " + TEXT + "; -fx-text-fill: white; -fx-font-size: 13px; -fx-font-weight: bold; -fx-background-radius: 8; -fx-padding: 9 18 9 18;");
         addButton.setOnAction(e -> {
             hide(errorLabel);
@@ -522,11 +630,11 @@ public final class FlashcardApp extends Application {
                 deckRepository.updateCardCount(deck, cards.size());
                 frontField.clear();
                 backField.clear();
-                index[0] = cards.size() - 1;
-                showingBack[0] = false;
+                studyIndex = cards.size() - 1;
+                showingAnswer = false;
                 render.run();
             } catch (IllegalArgumentException ex) {
-                show(errorLabel, ex.getMessage());
+                show(errorLabel, localizedError(ex.getMessage()));
             }
         });
 
@@ -547,36 +655,39 @@ public final class FlashcardApp extends Application {
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button backButton = new Button("Back");
+        Button backButton = new Button(text("common.back"));
         backButton.setStyle(secondaryButtonStyle());
         backButton.setOnAction(e -> showMainScene());
 
-        Button logoutButton = new Button("Log out");
+        Button logoutButton = new Button(text("common.logout"));
         logoutButton.setStyle(secondaryButtonStyle());
         logoutButton.setOnAction(e -> {
             currentUser = null;
             showLoginScene();
         });
 
-        HBox bar = new HBox(12, spacer, backButton, logoutButton);
+        HBox bar = new HBox(12, spacer, backButton, languageSelector(() -> showDashboardScene()), logoutButton);
         bar.setAlignment(Pos.CENTER_LEFT);
 
-        Label title = new Label("Analytics dashboard");
-        title.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 32px; -fx-font-family: Georgia; -fx-font-weight: bold;");
+        Label title = new Label(text("dashboard.title"));
+        title.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 32px; -fx-font-family: \"" + titleFontFamily() + "\"; -fx-font-weight: bold;");
 
         HBox statCards = new HBox(12,
-                statCard("Total decks", String.valueOf(report.totalDecks())),
-                statCard("Total cards", String.valueOf(report.totalCards())),
-                statCard("Avg cards/deck", String.format("%.1f", report.averageCardsPerDeck())),
-                statCard("Registered users", String.valueOf(report.registeredUsers())));
+                statCard(text("dashboard.totalDecks"), localization.number(report.totalDecks())),
+                statCard(text("dashboard.totalCards"), localization.number(report.totalCards())),
+                statCard(text("dashboard.averageCards"), localization.decimal(report.averageCardsPerDeck())),
+                statCard(text("dashboard.registeredUsers"), localization.number(report.registeredUsers())));
 
         VBox subjectBreakdown = new VBox(10);
         subjectBreakdown.setPadding(new Insets(16));
         subjectBreakdown.setStyle("-fx-background-color: " + PANEL + "; -fx-background-radius: 13;");
 
-        Label breakdownTitle = new Label("Decks per subject");
+        Label breakdownTitle = new Label(text("dashboard.subjectBreakdown"));
         breakdownTitle.setStyle("-fx-text-fill: " + TEXT + "; -fx-font-size: 14px; -fx-font-weight: bold;");
         subjectBreakdown.getChildren().add(breakdownTitle);
+        Label generatedAt = new Label(text("dashboard.generatedAt", localization.dateTime(Instant.now())));
+        generatedAt.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 11px;");
+        subjectBreakdown.getChildren().add(generatedAt);
 
         int maxDecks = report.decksPerSubject().values().stream().mapToInt(Integer::intValue).max().orElse(1);
         for (Map.Entry<String, Integer> entry : report.decksPerSubject().entrySet()) {
@@ -593,7 +704,7 @@ public final class FlashcardApp extends Application {
         page.setAlignment(Pos.TOP_CENTER);
         page.setStyle("-fx-background-color: " + BACKGROUND + ";");
 
-        scene.setRoot(page);
+        setPageRoot(page);
     }
 
     private VBox statCard(String label, String value) {
@@ -618,7 +729,7 @@ public final class FlashcardApp extends Application {
         bar.setStyle("-fx-accent: " + TEXT + ";");
         HBox.setHgrow(bar, Priority.ALWAYS);
 
-        Label countLabel = new Label(String.valueOf(count));
+        Label countLabel = new Label(localization.number(count));
         countLabel.setStyle("-fx-text-fill: " + MUTED + "; -fx-font-size: 12px;");
         countLabel.setMinWidth(20);
 
